@@ -10,3 +10,6 @@ results/*
 **/.DS_Store
 
 output/
+
+
+*.mp4

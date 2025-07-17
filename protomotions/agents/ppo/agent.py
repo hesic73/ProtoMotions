@@ -9,6 +9,8 @@ import math
 from pathlib import Path
 from typing import Optional, Tuple, Dict
 
+from tqdm import tqdm
+
 from lightning.fabric import Fabric
 
 from hydra.utils import instantiate
@@ -23,6 +25,7 @@ from protomotions.envs.base_env.env import BaseEnv
 from protomotions.utils.running_mean_std import RunningMeanStd
 from rich.progress import track
 from protomotions.agents.ppo.utils import discount_values, bounds_loss
+from protomotions.agents.callbacks.base_callback import RL_EvalCallback
 
 log = logging.getLogger(__name__)
 
@@ -75,6 +78,34 @@ class PPO:
         self.best_evaluated_score = None
 
         self.force_full_restart = False
+
+        self.eval_callbacks: list[RL_EvalCallback] = []
+
+        self._create_eval_callbacks()
+
+    def _create_eval_callbacks(self):
+        if self.config.eval_callbacks is not None:
+            for cb in self.config.eval_callbacks:
+                self.eval_callbacks.append(instantiate(
+                    self.config.eval_callbacks[cb], training_loop=self))
+
+    def _pre_evaluate_policy(self):
+        for c in self.eval_callbacks:
+            c.on_pre_evaluate_policy()
+
+    def _post_evaluate_policy(self):
+        for c in self.eval_callbacks:
+            c.on_post_evaluate_policy()
+
+    def _pre_eval_env_step(self, actor_state: dict):
+        for c in self.eval_callbacks:
+            actor_state = c.on_pre_eval_env_step(actor_state)
+        return actor_state
+
+    def _post_eval_env_step(self, actor_state):
+        for c in self.eval_callbacks:
+            actor_state = c.on_post_eval_env_step(actor_state)
+        return actor_state
 
     @property
     def should_stop(self):
@@ -562,15 +593,32 @@ class PPO:
         self.eval()
         done_indices = None  # Force reset on first entry
         step = 0
+
+        self._pre_evaluate_policy()
+
+        if self.config.max_eval_steps is not None:
+            pbar = tqdm(
+                range(self.config.max_eval_steps),
+                desc="Evaluating policy",
+            )
+        else:
+            pbar = None
+
         while self.config.max_eval_steps is None or step < self.config.max_eval_steps:
+            if pbar is not None:
+                pbar.update(1)
             obs = self.handle_reset(done_indices)
             # Obtain actor predictions
             actions = self.model.act(obs)
             # Step the environment
+            self._pre_eval_env_step({})
             obs, rewards, dones, terminated, extras = self.env_step(actions)
+            obs = self._post_eval_env_step({})
             all_done_indices = dones.nonzero(as_tuple=False)
             done_indices = all_done_indices.squeeze(-1)
             step += 1
+        
+        self._post_evaluate_policy()
 
     def post_epoch_logging(self, training_log_dict: Dict):
         end_time = time.time()

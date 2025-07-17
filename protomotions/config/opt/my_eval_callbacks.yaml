@@ -1,0 +1,15 @@
+# @package _global_
+
+agent:
+  config:
+    max_eval_steps: 500
+    eval_callbacks:
+      offline_rendering:
+        _target_: protomotions.agents.callbacks.offline_rendering.IsaacLabOfflineRenderingCallback
+        config:
+          video_width: 1080
+          video_height: 1920
+          video_filename: "eval.mp4" # configurable video filename
+          camera_offset: [1.0, -1.0, 0.3] # configurable camera offset (x, y, z)
+          camera_rotation_axis: [0.0, 0.0, 1.0] # configurable camera rotation axis
+          camera_rotation_angle_deg: 45 # configurable camera rotation angle in degrees

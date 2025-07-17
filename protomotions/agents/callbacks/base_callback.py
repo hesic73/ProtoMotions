@@ -15,7 +15,7 @@ class RL_EvalCallback(DeviceDtypeModuleMixin):
     def on_pre_eval_env_step(self, actor_state):
         return actor_state
 
-    def on_post_eval_env_step(self, actor_state, done_indices):
+    def on_post_eval_env_step(self, actor_state):
         return actor_state
 
     def on_post_evaluate_policy(self):
